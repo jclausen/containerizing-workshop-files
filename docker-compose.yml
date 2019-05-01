@@ -1,0 +1,58 @@
+version: '3'
+
+services:
+
+  # MSSQL
+  mssql:
+    image: microsoft/mssql-server-linux:2017-GA
+    environment:
+      SA_PASSWORD: "m55ql!4ev3r"
+      ACCEPT_EULA: "Y"
+      # In production, an SQL Server license key would go here
+      MSSQL_PID: "Developer"
+    volumes:
+      # This volume declaration ( mapped to the docker-machine VM ) ensures our databases persist between creations of the container
+      - /var/opt/mssql/data
+    ports:
+      - "1433:1433"
+
+  # ElasticSearch Container
+  elasticsearch:
+    image: elasticsearch:6.4.3
+    environment:
+      ES_JAVA_OPTS: "-Xms1g -Xmx1g"
+      http.host: "0.0.0.0"
+      transport.host: "127.0.0.1"
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+
+  # Application Server
+  app:
+    image: ortussolutions/commandbox:adobe2016
+    environment:
+      PORT: 8080
+      SSL_PORT: 8443
+      DEBUG: "true"
+      HEALTHCHECK_URI: http://app:8080/config/Routes.cfm
+      ELASTICSEARCH_HOST: elasticsearch
+      DB_USERNAME: 
+      
+    ports:
+      - "8080:8080"
+      - "8443:8443"
+      - "8188:8088"
+    volumes:
+      # Mount our application in delgated mode
+      - .:/app:delegated
+      - ./includes:/app/includes
+      # Mount our fusion reactor plugin, in delegated mode
+      - ./.engine/commandbox-fusionreactor:/root/.CommandBox/cfml/modules/commandbox-fusionreactor:delegated
+    expose:
+      - "8080"
+      - "8443"
+      - "8088"
+      # expose PDF server
+      - "8989"
+
+

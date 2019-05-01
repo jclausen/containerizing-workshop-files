@@ -1,0 +1,61 @@
+image: docker:18.09-git
+
+options:
+  size: 2x
+
+definitions:
+  services:
+    docker:
+      memory: 2048
+
+pipelines:
+  #Our default actions ( e.g. tests )
+  default:
+    - step:
+        services:
+          - docker
+        script:
+          # Ensure docker is ready - the binary and the daemon
+          - docker -v
+          - docker ps
+          # Install utilities and Docker Compose
+          - apk add --no-cache make linux-headers gcc libc-dev musl-dev python-dev libffi-dev openssl-dev curl py-pip bash jq
+          - pip install --no-cache-dir docker-compose
+          - export TEST_DOMAIN=localhost
+          # Seed our test database and bring our containers online
+          - cp ${PWD}/resources/database/new.bak ${PWD}/build/docker/mssql/tmp
+          # We need to use a pipelines-safe version of the compose file
+          - rm -f ${PWD}/docker-compose.yml
+          - mv ${PWD}/build/pipelines/docker-compose-bitbucket.yml ${PWD}/docker-compose.yml
+          - docker-compose up -d --build
+          - echo "Waiting for images to become available..."
+          - sleep 100s
+          - docker ps
+          # hit our tests directory, which will ensure that the datbase is restored to a default state
+          - curl http://${TEST_DOMAIN}:8080/tests?resetDatabase=true
+          # create a directory for our test results
+          - mkdir -p ${PWD}/tests/results
+          # Core Unit Tests
+          - echo "Running Core unit tests..."
+          - ${PWD}/build/pipelines/unit-test-module.sh Core
+          - echo "Core unit tests passed!"
+          # Security
+          - echo "Running Security unit tests..."
+          - ${PWD}/build/pipelines/unit-test-module.sh Security
+          - echo "Security unit tests passed!"
+          # Search
+          - echo "Running Search unit tests..."
+          - ${PWD}/build/pipelines/unit-test-module.sh Search
+          - echo "Search unit tests passed!"
+          
+
+# Branch-specific pipelines/builds below
+branches:
+  master:
+    - step:
+        script:
+          - echo "Master branch!"
+  development:
+    - step:
+        script:
+          - echo "Development branch!"
